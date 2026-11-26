@@ -44,7 +44,7 @@ HTML_PAGE = """
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MLBB Android ➔ iOS Converter</title>
+<title>MLBB Android â iOS Converter</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -178,31 +178,39 @@ HTML_PAGE = """
   <div class="glow-bg"></div>
   <div class="sparkles"></div>
   <div class="card">
-    <h1>Android ➔ iOS Converter</h1>
-    <p class="sub">បំប្លែង Script Skin MLBB តាមរូបមន្ត ASTC (Anti-Crash)</p>
+    <h1>Android â iOS Converter</h1>
+    <p class="sub">ááááááá Script Skin MLBB & Sync Unity Version 2019.4.33f1</p>
     <form method="POST" enctype="multipart/form-data">
-      <label>១. ជ្រើសរើសឯកសារ (.zip ឬ .unity3d)</label>
+      <label>á¡. áááá¾ááá¾áá¯ááá¶á (.zip á¬ .unity3d)</label>
       <input type="file" name="files" multiple required>
 
-      <label>២. កម្រិតគុណភាព Texture (ASTC)</label>
+      <label>á¢. Unity Version ááááá áááá</label>
+      <select name="unity_ver">
+        <option value="2019.4.33f1" selected>2019.4.33f1 (MLBB ááááá»áááááá - áááá¶á)</option>
+        <option value="2019.4.40f1">2019.4.40f1</option>
+        <option value="2021.3.16f1">2021.3.16f1</option>
+        <option value="keep">ááááá¶ Version áá¾á (Keep Original)</option>
+      </select>
+
+      <label>á£. ááááá·ááá»ááá¶á Texture (ASTC)</label>
       <select name="astc_block">
-        <option value="4">4x4 (ច្បាស់បំផុត)</option>
-        <option value="6" selected>6x6 (ស្តង់ដារ - ណែនាំ)</option>
-        <option value="8">8x8 (ទំហំតូច)</option>
-        <option value="12">12x12 (ទំហំតូចបំផុត)</option>
+        <option value="4">4x4 (áááá¶áááááá»á)</option>
+        <option value="6" selected>6x6 (ááááááá¶á - áááá¶á)</option>
+        <option value="8">8x8 (ááá ááá¼á)</option>
+        <option value="12">12x12 (ááá ááá¼ááááá»á)</option>
       </select>
 
       <div class="check-row">
         <input type="checkbox" id="rename_dirs" name="rename_dirs" value="true" checked>
-        <label for="rename_dirs" style="margin:0;">ប្តូរឈ្មោះ Folder android ➔ ios</label>
+        <label for="rename_dirs" style="margin:0;">áááá¼áááááá Folder & Path android â ios</label>
       </div>
 
       <div class="check-row">
         <input type="checkbox" id="aggressive" name="aggressive" value="true">
-        <label for="aggressive" style="margin:0;">Aggressive (បំប្លែងរូបភាពមិនទាន់បង្រួម)</label>
+        <label for="aggressive" style="margin:0;">Aggressive (ááááááááá¼ááá¶ááá·ááá¶ááááááá½á)</label>
       </div>
 
-      <button type="submit">⚡ ចាប់ផ្តើមបំប្លែងទៅ iOS</button>
+      <button type="submit">â¡ áá¶áááááá¾áááááááááá iOS</button>
     </form>
   </div>
 </body>
@@ -211,6 +219,17 @@ HTML_PAGE = """
 
 def rename_android_dir(path_str: str) -> str:
     return re.sub(r'(?<![a-zA-Z0-9])android(?![a-zA-Z0-9])', 'ios', path_str, flags=re.IGNORECASE)
+
+def patch_header_unity_version(raw_bytes: bytes, target_ver: str) -> bytes:
+    if target_ver == "keep" or not raw_bytes.startswith(b"UnityFS"):
+        return raw_bytes
+    target_bytes = target_ver.encode("ascii")
+    # ááááááá pattern áá¼ááá¶ 2017.4.21f1 á¬ 2019.4.33f1 ááááááááá¾áááá¯ááá¶á (256 bytes áááá¼á)
+    head = raw_bytes[:256]
+    m = re.search(br'20\d{2}\.\d+\.\d+[a-z]\d+', head)
+    if m and len(m.group(0)) == len(target_bytes):
+        return raw_bytes[:m.start()] + target_bytes + raw_bytes[m.end():]
+    return raw_bytes
 
 def encode_astc_with_mips(pil_img: Image.Image, bx: int, by: int, mip_count: int) -> bytes:
     img = pil_img.convert("RGBA")
@@ -243,19 +262,22 @@ def get_original_packer(env) -> str:
         pass
     return "lz4"
 
-def convert_bytes(raw_bytes: bytes, astc_block: str = "6", rename_dirs: bool = True, aggressive: bool = False) -> bytes:
+def convert_bytes(raw_bytes: bytes, astc_block: str = "6", rename_dirs: bool = True, aggressive: bool = False, unity_ver: str = "2019.4.33f1") -> bytes:
+    patched_raw = patch_header_unity_version(raw_bytes, unity_ver)
     try:
-        env = UnityPy.load(raw_bytes)
+        env = UnityPy.load(patched_raw)
     except Exception:
-        return raw_bytes
+        return patched_raw
     if not env.objects:
-        return raw_bytes
+        return patched_raw
 
     target_fmt, bx, by = ASTC_INFO.get(astc_block, (TextureFormat.ASTC_RGBA_6x6, 6, 6))
 
     for f in env.files.values():
         if isinstance(f, SerializedFile):
             f.target_platform = BuildTarget.iOS
+            if unity_ver != "keep":
+                f.unity_version = unity_ver
             if rename_dirs and hasattr(f, "externals"):
                 for ext in f.externals:
                     if getattr(ext, "path", None):
@@ -264,6 +286,8 @@ def convert_bytes(raw_bytes: bytes, astc_block: str = "6", rename_dirs: bool = T
             for sub in f.files.values():
                 if isinstance(sub, SerializedFile):
                     sub.target_platform = BuildTarget.iOS
+                    if unity_ver != "keep":
+                        sub.unity_version = unity_ver
                     if rename_dirs and hasattr(sub, "externals"):
                         for ext in sub.externals:
                             if getattr(ext, "path", None):
@@ -300,18 +324,19 @@ def convert_bytes(raw_bytes: bytes, astc_block: str = "6", rename_dirs: bool = T
     try:
         return env.file.save(packer=get_original_packer(env))
     except Exception:
-        return raw_bytes
+        return patched_raw
 
 @app.route("/", methods=["GET", "POST"])
 def index():
     if request.method == "POST":
         uploaded = [f for f in request.files.getlist("files") if f.filename]
         if not uploaded:
-            return "សូមជ្រើសរើសឯកសារ!", 400
+            return "áá¼ááááá¾ááá¾áá¯ááá¶á!", 400
 
         astc_block = request.form.get("astc_block", "6")
         rename_dirs = request.form.get("rename_dirs") == "true"
         aggressive = request.form.get("aggressive") == "true"
+        unity_ver = request.form.get("unity_ver", "2019.4.33f1")
 
         if len(uploaded) == 1 and uploaded[0].filename.lower().endswith(".zip"):
             in_buf = io.BytesIO(uploaded[0].read())
@@ -320,7 +345,7 @@ def index():
                 for item in zin.infolist():
                     if not item.filename.endswith("/"):
                         new_name = rename_android_dir(item.filename) if rename_dirs else item.filename
-                        zout.writestr(new_name, convert_bytes(zin.read(item.filename), astc_block, rename_dirs, aggressive))
+                        zout.writestr(new_name, convert_bytes(zin.read(item.filename), astc_block, rename_dirs, aggressive, unity_ver))
             out_buf.seek(0)
             base = os.path.splitext(uploaded[0].filename)[0]
             return send_file(out_buf, as_attachment=True, download_name=f"{base}_iOS.zip")
@@ -328,13 +353,13 @@ def index():
         if len(uploaded) == 1:
             f = uploaded[0]
             out_name = rename_android_dir(f.filename) if rename_dirs else f.filename
-            return send_file(io.BytesIO(convert_bytes(f.read(), astc_block, rename_dirs, aggressive)), as_attachment=True, download_name=out_name)
+            return send_file(io.BytesIO(convert_bytes(f.read(), astc_block, rename_dirs, aggressive, unity_ver)), as_attachment=True, download_name=out_name)
 
         out_buf = io.BytesIO()
         with zipfile.ZipFile(out_buf, "w", zipfile.ZIP_DEFLATED) as zout:
             for f in uploaded:
                 out_name = rename_android_dir(f.filename) if rename_dirs else f.filename
-                zout.writestr(out_name, convert_bytes(f.read(), astc_block, rename_dirs, aggressive))
+                zout.writestr(out_name, convert_bytes(f.read(), astc_block, rename_dirs, aggressive, unity_ver))
         out_buf.seek(0)
         return send_file(out_buf, as_attachment=True, download_name="MLBB_Script_iOS.zip")
 
