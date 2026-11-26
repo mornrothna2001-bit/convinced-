@@ -1,0 +1,8 @@
+UnityPy==1.25.4
+Pillow>=10.0.0,<12
+texture2ddecoder==1.0.6
+astc-encoder-py==0.1.12
+etcpak==0.9.15
+lz4>=4.0.0
+flask>=3.0.0,<4
+gunicorn
